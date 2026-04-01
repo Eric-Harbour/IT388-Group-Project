@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(lldb) Launch OMP",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/omp_exec",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "CMake: build"
+        },
+		{
+            "name": "(lldb) Launch MPI",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/mpi_exec",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "CMake: build"
+        },
+		{
+            "name": "(lldb) Launch CUDA",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/cuda_exec",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "CMake: build"
+        }
+    ]
+}
