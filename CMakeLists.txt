@@ -16,6 +16,7 @@ find_package(OpenMP REQUIRED)
 
 add_executable(omp_exec
     src/omp_main.cpp
+    src/image.cpp
 )
 
 target_link_libraries(omp_exec
@@ -27,6 +28,7 @@ find_package(MPI REQUIRED)
 
 add_executable(mpi_exec
     src/mpi_main.cpp
+    src/image.cpp
 )
 
 target_link_libraries(mpi_exec
