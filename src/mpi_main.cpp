@@ -18,8 +18,8 @@ int main(int argc, char** argv) {
 
     // Manager validates input arguments and loads image
     if (world_rank == 0) {    
-        if (argc != 3)  {
-            std::cout << "Usage: ./" << argv[0] << " <number-of-processors> <image-file-name>" << std::endl;
+        if (argc != 2)  {
+            std::cout << "Usage: -n <number-of-processes>./" << argv[0] << " <image-file-name>" << std::endl;
         }
         char *image_filename = argv[2];
 
