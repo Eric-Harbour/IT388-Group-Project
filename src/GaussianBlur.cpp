@@ -30,7 +30,7 @@ namespace Gaussian
         return kernel;
     }
 
-    std::vector<float> gaussianBlur2D(
+    std::vector<float> gaussianBlur2D_openMP(
         const std::vector<float>& input,
         int width,
         int height,
@@ -39,6 +39,7 @@ namespace Gaussian
         int radius = kernel.size() / 2;
         std::vector<float> output(width * height, 0.0f);
 
+        #pragma omp parallel for schedule(static)
         for (int y = 0; y < height; ++y)
         {
             for (int x = 0; x < width; ++x)
