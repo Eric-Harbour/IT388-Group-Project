@@ -31,12 +31,19 @@ int main(int argc, char** argv) {
         }
     }
 
+	int local_num_rows = imgHeight / world_size; // How many rows each processor handles
+	int local_size = local_num_rows * imgWidth * 4; // How many bytes each processor handles
+	unsigned char* local_pixels = new unsigned char[local_size];
+
     // Broadcast image width and height from the manager to all other processes
     MPI_Bcast(&imgWidth,  1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&imgHeight, 1, MPI_INT, 0, MPI_COMM_WORLD);
+	// Scatter pixels 
+    MPI_Scatter(&extractedPixels, local_size, MPI_UNSIGNED_CHAR, &local_pixels, local_size, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-    std::cout << "Hello from rank " << world_rank << " of " << world_size << std::endl;
+	// TODO
 
+	delete[] local_pixels;
     MPI_Finalize();
     return 0;
 }
