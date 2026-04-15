@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <vector>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <iostream>
@@ -58,7 +59,7 @@ void transpose(Image& image) {
     stbi_image_free(image.data);
     image.data = newData;
     
-    std::swap(image.width, image.height);
+    // std::swap(image.width, image.height);
     image.transposed = !image.transposed;
 }
 
@@ -69,14 +70,28 @@ void save_image(Image& image, const std::string& file){
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
-void horizontal_blur(Image& image, float sigma, int radius, int worldSize, MPI_Comm world){
+void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int worldSize, MPI_Comm world){
     // Split the image into rows to calculate the row-based blur
-	int localHeight = image.height / worldSize; // How many rows each processor handles
-	int localSize = localHeight * image.width * image.channels; // How many bytes each processor handles
+    std::vector<int> sendCounts, displacements;
+    sendCounts.resize(worldSize);
+    displacements.resize(worldSize);
     
-	// Scatter pixels so each processor has their own subdivided image
-	std::byte* localPixels = new std::byte[localSize];
-    MPI_Scatter(image.data, localSize, MPI_UNSIGNED_CHAR, localPixels, localSize, MPI_UNSIGNED_CHAR, 0, world);
+    for (int rank = 0; rank < worldSize; rank++) {
+        int localHeight = image.height / worldSize;
+
+        if(rank == worldSize - 1)
+            localHeight += image.height % worldSize;
+
+        sendCounts[rank] = localHeight * image.width * image.channels;
+        displacements[rank] = (rank == 0) ? 0 : displacements[rank - 1] + sendCounts[rank - 1];
+    }
+
+	int localSize = sendCounts[worldRank]; // How many bytes each processor handles
+	int localHeight = localSize / (image.width * image.channels);
+
+    // Scatter pixels so each processor has their own subdivided image
+    std::byte* localPixels = new std::byte[localSize];
+    MPI_Scatterv(image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, localPixels, localSize, MPI_UNSIGNED_CHAR, 0, world);
 
     // Blur the local pixels horizontally
     for(int y = 0; y < localHeight; y++){
@@ -107,7 +122,7 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldSize, MPI_C
     }
 
     // Send the local pixels back to the image
-    MPI_Gather(localPixels, localSize, MPI_UNSIGNED_CHAR, image.data, localSize, MPI_UNSIGNED_CHAR, 0, world);
+    MPI_Gatherv(localPixels, localSize, MPI_UNSIGNED_CHAR, image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0, world);
     delete[] localPixels;
 }
 
@@ -160,13 +175,13 @@ int main(int argc, char** argv) {
     MPI_Bcast(&image.channels, 1, MPI_INT, 0, world);
     
     // Do the row gaussian blur first
-    horizontal_blur(image, sigma, radius, worldSize, world);
+    horizontal_blur(image, sigma, radius, worldRank, worldSize, world);
 
     // Flip the image and do the vertical gaussian bllur now
     transpose(image);
 
     // Now that its flipped, do another blur for the other direction
-    horizontal_blur(image, sigma, radius, worldSize, world);
+    horizontal_blur(image, sigma, radius, worldRank, worldSize, world);
 
     // Reconstruct back to normal image
     transpose(image);
