@@ -65,9 +65,6 @@ void save_image(Image& image, const std::string& file){
     if(!image.data)
         return;
 
-    // if(image.transposed)
-    //     transpose(image);
-
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
@@ -84,14 +81,19 @@ void horizontal_blur(Image& image, int worldSize, MPI_Comm world){
     for(int y = 0; y < localHeight; y++){
         for(int x = 0; x < image.width; x++){
             for(int k = 0; k < image.channels; k++){
+                // Calculate index of this pixel
                 int index = (y * image.width + x) * image.channels + k;
                 float sum = 0.0f;
-                float weightSum = 0.0f;
-                int radius = 5; // Example radius
-                float sigma = 2.0f;
 
-                for (int dx = -radius; dx <= radius; ++dx) {
+                // Gaussian blur kernel
+                float weightSum = 0.0f;
+                float sigma = 2.0f;
+                int radius = 5;
+
+                // Blur this row by radius
+                for (int dx = -radius; dx <= radius; dx++) {
                     int nx = x + dx;
+
                     if (nx >= 0 && nx < image.width) {
                         float weight = std::exp(-(dx * dx) / (2.0f * sigma * sigma));
                         int neighborIndex = (y * image.width + nx) * image.channels + k;
@@ -112,7 +114,8 @@ void horizontal_blur(Image& image, int worldSize, MPI_Comm world){
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
-
+    
+    std::string outputPath = "./resources/output.png";
     int worldRank, worldSize;
     Image image;
 
@@ -122,10 +125,14 @@ int main(int argc, char** argv) {
 
     // Manager validates input arguments and loads image
     if (worldRank == 0) {    
-        if (argc != 2)  {
+        if (argc < 2) {
             std::cout << "Usage: mpiexec -n <number-of-processes> " << argv[0] << " <image-file-name>" << std::endl;
             MPI_Abort(world, 1);
             return 1;
+        }
+
+        if (argc > 2) {
+            outputPath = argv[2];
         }
 
         // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
@@ -149,11 +156,8 @@ int main(int argc, char** argv) {
     // Reconstruct back to normal image
     transpose(image);
 
-    // Output a test image
-    if(worldRank == 0){
-        save_image(image, "./resources/output.png");
-    }
-
+    // Cleanup and save the output
+    save_image(image, outputPath);
     MPI_Finalize();
     return 0;
 }
