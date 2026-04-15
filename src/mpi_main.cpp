@@ -1,3 +1,4 @@
+#include <cstdio>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <iostream>
@@ -68,7 +69,7 @@ void save_image(Image& image, const std::string& file){
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
-void horizontal_blur(Image& image, int worldSize, MPI_Comm world){
+void horizontal_blur(Image& image, float sigma, int radius, int worldSize, MPI_Comm world){
     // Split the image into rows to calculate the row-based blur
 	int localHeight = image.height / worldSize; // How many rows each processor handles
 	int localSize = localHeight * image.width * image.channels; // How many bytes each processor handles
@@ -87,8 +88,6 @@ void horizontal_blur(Image& image, int worldSize, MPI_Comm world){
 
                 // Gaussian blur kernel
                 float weightSum = 0.0f;
-                float sigma = 2.0f;
-                int radius = 5;
 
                 // Blur this row by radius
                 for (int dx = -radius; dx <= radius; dx++) {
@@ -115,9 +114,12 @@ void horizontal_blur(Image& image, int worldSize, MPI_Comm world){
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     
-    std::string outputPath = "./resources/output.png";
     int worldRank, worldSize;
     Image image;
+    
+    std::string outputPath = "./resources/output.png";
+    float sigma = 1.0f;
+    int radius = 2;
 
     MPI_Comm world = MPI_COMM_WORLD;
     MPI_Comm_rank(world, &worldRank);
@@ -126,7 +128,7 @@ int main(int argc, char** argv) {
     // Manager validates input arguments and loads image
     if (worldRank == 0) {    
         if (argc < 2) {
-            std::cout << "Usage: mpiexec -n <number-of-processes> " << argv[0] << " <image-file-name>" << std::endl;
+            std::printf("Usage: mpiexec -n <number-of-processes> %s (image-file-name) [output-file-name] [sigma] [radius]\n", argv[0]);
             MPI_Abort(world, 1);
             return 1;
         }
@@ -134,6 +136,16 @@ int main(int argc, char** argv) {
         if (argc > 2) {
             outputPath = argv[2];
         }
+
+        if (argc > 3) {
+            sigma = std::stof(argv[3]);
+        }
+
+        if (argc > 4) {
+            radius = std::stoi(argv[4]);
+        }
+
+        std::printf("Running blur on %s with sigma %f and radius %d\n", argv[1], sigma, radius);
 
         // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
         image = create_image(argv[1]);
@@ -145,13 +157,13 @@ int main(int argc, char** argv) {
     MPI_Bcast(&image.channels, 1, MPI_INT, 0, world);
     
     // Do the row gaussian blur first
-    horizontal_blur(image, worldSize, world);
+    horizontal_blur(image, sigma, radius, worldSize, world);
 
     // Flip the image and do the vertical gaussian bllur now
     transpose(image);
 
     // Now that its flipped, do another blur for the other direction
-    horizontal_blur(image, worldSize, world);
+    horizontal_blur(image, sigma, radius, worldSize, world);
 
     // Reconstruct back to normal image
     transpose(image);
