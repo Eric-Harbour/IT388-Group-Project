@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
         radius = std::stoi(argv[4]);
     }
 
-    std::printf("Running blur on %s with sigma %f and radius %d\n", argv[1], sigma, radius);
+    std::printf("Running blur on %s with sigma %f and radius %d with CUDA\n", argv[1], sigma, radius);
 
     // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
     Image inputImage = create_image(argv[1]);
@@ -144,6 +144,12 @@ int main(int argc, char** argv) {
 
     dim3 blockDim(16, 16); // 16x16 = 256 threads
     dim3 gridDim((inputImage.width + blockDim.x - 1) / blockDim.x, (inputImage.height + blockDim.y - 1) / blockDim.y);
+
+    // Start timing
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
     
     // Do the row gaussian blur first
     horizontal_blur<<<gridDim, blockDim>>>(inputImage, outputImage, sigma, radius);
@@ -160,9 +166,16 @@ int main(int argc, char** argv) {
 
     // Reconstruct back to normal image
     transpose(inputImage);
-
-    // Make sure all data is complete
     cudaDeviceSynchronize();
+
+    // Stop timing
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+    std::printf("Time taken: %f seconds\n", elapsedTime / 1000.0);
+
+    // Output the saved data
     save_image(inputImage, outputPath);
     free_image(inputImage);
     free_image(outputImage);
