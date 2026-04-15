@@ -7,6 +7,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include <cstddef>
+#include <cstring>
 #include <iostream>
 #include <omp.h>
 #include <vector>
@@ -24,8 +25,7 @@ struct Image {
 
 Image create_image(const std::string &file) {
 	Image image;
-	image.data = reinterpret_cast<std::byte *>(stbi_load(
-		file.c_str(), &image.width, &image.height, &image.channels, 4));
+	image.data = reinterpret_cast<std::byte *>(stbi_load( file.c_str(), &image.width, &image.height, &image.channels, 4));
 
 	if (!image.data) {
 		std::cerr << "Failed to load image" << std::endl;
@@ -53,9 +53,9 @@ void transpose(Image &image) {
 		return;
 
 	// Use STBI_MALLOC so stbi_image_free can handle it later
-	std::byte *newData = reinterpret_cast<std::byte *>(
-		STBI_MALLOC(image.width * image.height * image.channels));
+	std::byte *newData = reinterpret_cast<std::byte *>(STBI_MALLOC(image.width * image.height * image.channels));
 
+#pragma omp parallel for schedule(static)
 	for (int i = 0; i < image.width; i++) {
 		for (int j = 0; j < image.height; j++) {
 			for (int k = 0; k < image.channels; k++) {
@@ -68,7 +68,7 @@ void transpose(Image &image) {
 	stbi_image_free(image.data);
 	image.data = newData;
 
-	// std::swap(image.width, image.height);
+	std::swap(image.width, image.height);
 	image.transposed = !image.transposed;
 }
 
@@ -76,38 +76,16 @@ void save_image(Image &image, const std::string &file) {
 	if (!image.data)
 		return;
 
-	stbi_write_png(file.c_str(), image.width, image.height, image.channels,
-				   image.data, 0);
+	stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
-void horizontal_blur(Image &image, float sigma, int radius, int worldRank,
-					 int worldSize) {
+void horizontal_blur(Image &image, float sigma, int radius) {
 	// Split the image into rows to calculate the row-based blur
-	std::vector<int> sendCounts, displacements;
-	sendCounts.resize(worldSize);
-	displacements.resize(worldSize);
-
-	for (int rank = 0; rank < worldSize; rank++) {
-		int localHeight = image.height / worldSize;
-
-		if (rank == worldSize - 1)
-			localHeight += image.height % worldSize;
-
-		sendCounts[rank] = localHeight * image.width * image.channels;
-		displacements[rank] =
-			(rank == 0) ? 0 : displacements[rank - 1] + sendCounts[rank - 1];
-	}
-
-	int localSize =
-		sendCounts[worldRank]; // How many bytes each processor handles
-	int localHeight = localSize / (image.width * image.channels);
-
-	// Scatter pixels so each processor has their own subdivided image
-	std::byte *localPixels = new std::byte[localSize];
+	std::vector<std::byte> output(image.width * image.height * image.channels);
 
 	// Blur the local pixels horizontally
 #pragma omp parallel for
-	for (int y = 0; y < localHeight; y++) {
+	for (int y = 0; y < image.height; y++) {
 		for (int x = 0; x < image.width; x++) {
 			for (int k = 0; k < image.channels; k++) {
 				// Calculate index of this pixel
@@ -122,24 +100,19 @@ void horizontal_blur(Image &image, float sigma, int radius, int worldRank,
 					int nx = x + dx;
 
 					if (nx >= 0 && nx < image.width) {
-						float weight =
-							std::exp(-(dx * dx) / (2.0f * sigma * sigma));
-						int neighborIndex =
-							(y * image.width + nx) * image.channels + k;
-						sum += static_cast<float>(static_cast<unsigned char>(
-								   localPixels[neighborIndex])) *
-							   weight;
+						float weight = std::exp(-(dx * dx) / (2.0f * sigma * sigma));
+						int neighborIndex = (y * image.width + nx) * image.channels + k;
+						sum += static_cast<float>(static_cast<unsigned char>(image.data[neighborIndex])) * weight;
 						weightSum += weight;
 					}
 				}
 
-				localPixels[index] = static_cast<std::byte>(
-					static_cast<unsigned char>(sum / weightSum));
+				output[index] = static_cast<std::byte>(static_cast<unsigned char>(sum / weightSum));
 			}
 		}
 	}
 
-	delete[] localPixels;
+	memcpy(image.data, output.data(), output.size());
 }
 
 int main(int argc, char **argv) {
@@ -148,12 +121,10 @@ int main(int argc, char **argv) {
 	std::string outputPath = "./resources/output.png";
 	float sigma = 1.0f;
 	int radius = 2;
-	int numThreads = omp_get_num_procs();
+	int num_threads = omp_get_num_procs();
 
 	if (argc < 2) {
-		std::printf("Usage: %s <image-file-name> [output-file-name] [sigma] "
-					"[radius] [num-threads]\n",
-					argv[0]);
+		std::printf("Usage: %s <image-file-name> [output-file-name] [sigma] [radius] [num-threads]\n", argv[0]);
 		return 1;
 	}
 	if (argc > 2) {
@@ -166,26 +137,34 @@ int main(int argc, char **argv) {
 		radius = std::stoi(argv[4]);
 	}
 	if (argc > 5) {
-		int numThreads = std::stoi(argv[5]);
+		num_threads = std::stoi(argv[5]);
 	}
-	omp_set_num_threads(numThreads);
+	omp_set_num_threads(num_threads);
 
-	std::printf("Running blur on %s with sigma %f and radius %d\n", argv[1],
-				sigma, radius);
+	std::printf("Running blur on %s with sigma %f and radius %d. Using %d threads.\n", argv[1], sigma, radius, num_threads);
 
 	// Extract pixels with pixelComponent=4 (red, green, blue, alpha)
 	image = create_image(argv[1]);
-	// Do the row gaussian blur first
-	horizontal_blur(image, sigma, radius, omp_get_thread_num(), numThreads);
 
-	// Flip the image and do the vertical gaussian bllur now
+	double start_time = omp_get_wtime();
+
+	// Do the row gaussian blur first
+	horizontal_blur(image, sigma, radius);
+
+	// Flip the image and do the vertical gaussian blur now
 	transpose(image);
 
 	// Now that its flipped, do another blur for the other direction
-	horizontal_blur(image, sigma, radius, omp_get_thread_num(), numThreads);
+	horizontal_blur(image, sigma, radius);
 
 	// Reconstruct back to normal image
 	transpose(image);
+
+	double elapsed_time = omp_get_wtime() - start_time;
+	std::printf("Elapsed time: %.4f seconds\n", elapsed_time);
+
+	save_image(image, outputPath);
+	free_image(image);
 
 	return 0;
 }
