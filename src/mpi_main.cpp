@@ -151,6 +151,9 @@ int main(int argc, char** argv) {
         image = create_image(argv[1]);
     }
 
+    // Time the execution
+    double startTime = MPI_Wtime();
+
     // Broadcast basic image data
     MPI_Bcast(&image.width, 1, MPI_INT, 0, world);
     MPI_Bcast(&image.height, 1, MPI_INT, 0, world);
@@ -167,6 +170,14 @@ int main(int argc, char** argv) {
 
     // Reconstruct back to normal image
     transpose(image);
+
+    // Feedback for time
+    double endTime = MPI_Wtime();
+    double elapsedTime = endTime - startTime;
+    
+    if(worldRank == 0){
+        std::printf("Time taken: %f seconds\n", elapsedTime);
+    }
 
     // Cleanup and save the output
     save_image(image, outputPath);
