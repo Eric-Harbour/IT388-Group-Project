@@ -6,4 +6,3 @@ add_library(stb INTERFACE)
 
 # Define where the header files are
 target_include_directories(stb INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-

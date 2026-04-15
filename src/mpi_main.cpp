@@ -1,7 +1,7 @@
-#include <cstdio>
-#include <vector>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <cstdio>
+#include <vector>
 #include <iostream>
 #include <cstddef>
 #include <cassert>
@@ -196,6 +196,7 @@ int main(int argc, char** argv) {
 
     // Cleanup and save the output
     save_image(image, outputPath);
+    free_image(image);
     MPI_Finalize();
     return 0;
 }
