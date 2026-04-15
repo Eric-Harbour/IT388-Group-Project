@@ -1,11 +1,11 @@
-#include <cstdio>
+#include <cassert>
+#include <mpi.h>
+#include <string>
+#include <iostream>
+#include <utility>
 #include <vector>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <iostream>
-#include <cstddef>
-#include <cassert>
-#include <mpi.h>
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -41,6 +41,9 @@ void free_image(Image& image){
 }
 
 void transpose(Image& image) {
+    std::swap(image.width, image.height);
+    image.transposed = !image.transposed;
+
     // Skip if no data
     if(!image.data)
         return;
@@ -48,19 +51,16 @@ void transpose(Image& image) {
     // Use STBI_MALLOC so stbi_image_free can handle it later
     std::byte* newData = reinterpret_cast<std::byte*>(STBI_MALLOC(image.width * image.height * image.channels));
 
-    for(int i = 0; i < image.width; i++) {
-        for(int j = 0; j < image.height; j++) {
+    for(int i = 0; i < image.height; i++) {
+        for(int j = 0; j < image.width; j++) {
             for(int k = 0; k < image.channels; k++) {
-                newData[(j + i * image.height) * image.channels + k] = image.data[(i + j * image.width) * image.channels + k];
+                newData[(j + i * image.width) * image.channels + k] = image.data[(i + j * image.height) * image.channels + k];
             }
         }
     }
 
     stbi_image_free(image.data);
     image.data = newData;
-    
-    // std::swap(image.width, image.height);
-    image.transposed = !image.transposed;
 }
 
 void save_image(Image& image, const std::string& file){
@@ -91,6 +91,7 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
 
     // Scatter pixels so each processor has their own subdivided image
     std::byte* localPixels = new std::byte[localSize];
+    std::byte* blurredPixels = new std::byte[localSize];
     MPI_Scatterv(image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, localPixels, localSize, MPI_UNSIGNED_CHAR, 0, world);
 
     // Blur the local pixels horizontally
@@ -116,14 +117,15 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
                     }
                 }
 
-                localPixels[index] = static_cast<std::byte>(static_cast<unsigned char>(sum / weightSum));
+                blurredPixels[index] = static_cast<std::byte>(static_cast<unsigned char>(sum / weightSum));
             }
         }
     }
 
     // Send the local pixels back to the image
-    MPI_Gatherv(localPixels, localSize, MPI_UNSIGNED_CHAR, image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0, world);
+    MPI_Gatherv(blurredPixels, localSize, MPI_UNSIGNED_CHAR, image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0, world);
     delete[] localPixels;
+    delete[] blurredPixels;
 }
 
 int main(int argc, char** argv) {
@@ -160,7 +162,7 @@ int main(int argc, char** argv) {
             radius = std::stoi(argv[4]);
         }
 
-        std::printf("Running blur on %s with sigma %f and radius %d\n", argv[1], sigma, radius);
+        std::printf("Running blur on %s with sigma %f and radius %d with MPI\n", argv[1], sigma, radius);
 
         // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
         image = create_image(argv[1]);
@@ -173,6 +175,8 @@ int main(int argc, char** argv) {
     MPI_Bcast(&image.width, 1, MPI_INT, 0, world);
     MPI_Bcast(&image.height, 1, MPI_INT, 0, world);
     MPI_Bcast(&image.channels, 1, MPI_INT, 0, world);
+    MPI_Bcast(&sigma, 1, MPI_FLOAT, 0, world);
+    MPI_Bcast(&radius, 1, MPI_INT, 0, world);
     
     // Do the row gaussian blur first
     horizontal_blur(image, sigma, radius, worldRank, worldSize, world);
@@ -196,6 +200,7 @@ int main(int argc, char** argv) {
 
     // Cleanup and save the output
     save_image(image, outputPath);
+    free_image(image);
     MPI_Finalize();
     return 0;
 }

@@ -49,3 +49,7 @@ set_target_properties(cuda_exec PROPERTIES
     CUDA_STANDARD_REQUIRED ON
     CUDA_ARCHITECTURES 75
 )
+
+target_compile_options(cuda_exec PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=550>
+)
