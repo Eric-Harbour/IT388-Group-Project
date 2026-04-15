@@ -15,7 +15,7 @@
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/build/bin/mpi_exec",
-            "args": [],
+            "args": ["./resources/image.png"],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "CMake: build"
         },
