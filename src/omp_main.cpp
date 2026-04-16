@@ -29,7 +29,7 @@ Image create_image(const std::string &file) {
 
 	if (!image.data) {
 		std::cerr << "Failed to load image" << std::endl;
-		// TODO: exit somehow
+		std::exit(1);
 		assert(image.data != nullptr && "Failed to load image");
 	}
 
