@@ -33,10 +33,10 @@ Image create_image(const std::string &file) {
 		assert(image.data != nullptr && "Failed to load image");
 	}
 
-	image.channels = 4; // Reset channels to 4 because stbi_load's req_comp is 4
-						// so the data will be forced to 4.
+	image.channels = 4; // Reset channels to 4 because stbi_load's req_comp is 4 so the data will be forced to 4.
 	return image;
 }
+
 void free_image(Image &image) {
 	if (image.data)
 		stbi_image_free(image.data);
@@ -81,7 +81,7 @@ void save_image(Image &image, const std::string &file) {
 
 void horizontal_blur(Image &image, float sigma, int radius) {
 	// Split the image into rows to calculate the row-based blur
-	std::vector<std::byte> output(image.width * image.height * image.channels);
+	std::vector<std::byte> output_image(image.width * image.height * image.channels);
 
 	// Blur the local pixels horizontally
 #pragma omp parallel for
@@ -107,12 +107,12 @@ void horizontal_blur(Image &image, float sigma, int radius) {
 					}
 				}
 
-				output[index] = static_cast<std::byte>(static_cast<unsigned char>(sum / weightSum));
+				output_image[index] = static_cast<std::byte>(static_cast<unsigned char>(sum / weightSum));
 			}
 		}
 	}
 
-	memcpy(image.data, output.data(), output.size());
+	memcpy(image.data, output_image.data(), output_image.size());
 }
 
 int main(int argc, char **argv) {
