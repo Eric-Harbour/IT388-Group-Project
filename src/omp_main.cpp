@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
 	}
 	omp_set_num_threads(num_threads);
 
-	std::printf("Running blur on %s with sigma %f and radius %d. Using %d threads.\n", argv[1], sigma, radius, num_threads);
+	std::printf("Running blur on %s with sigma %f and radius %d. Using %d threads.", argv[1], sigma, radius, num_threads);
 
 	// Extract pixels with pixelComponent=4 (red, green, blue, alpha)
 	image = create_image(argv[1]);
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
 	transpose(image);
 
 	double elapsed_time = omp_get_wtime() - start_time;
-	std::printf("Elapsed time: %.4f seconds\n", elapsed_time);
+	std::printf(" Elapsed time: %.4f seconds\n", elapsed_time);
 
 	save_image(image, outputPath);
 	free_image(image);

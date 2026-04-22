@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
         threadCountRow = std::stoi(argv[5]);
     }
 
-    std::printf("Running blur on %s with sigma %f and radius %d with CUDA\n", argv[1], sigma, radius);
+    std::printf("Running blur on %s with sigma %f and radius %d with CUDA.", argv[1], sigma, radius);
 
     // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
     Image inputImage = create_image(argv[1]);
@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
     cudaEventSynchronize(stop);
     float elapsedTime;
     cudaEventElapsedTime(&elapsedTime, start, stop);
-    std::printf("Time taken: %f seconds\n", elapsedTime / 1000.0);
+    std::printf(" Elapsed time: %f seconds\n", elapsedTime / 1000.0);
 
     // Output the saved data
     save_image(inputImage, outputPath);

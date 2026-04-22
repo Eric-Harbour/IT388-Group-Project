@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
             radius = std::stoi(argv[4]);
         }
 
-        std::printf("Running blur on %s with sigma %f and radius %d with MPI\n", argv[1], sigma, radius);
+        std::printf("Running blur on %s with sigma %f and radius %d with MPI.", argv[1], sigma, radius);
 
         // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
         image = create_image(argv[1]);
@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
     double elapsedTime = endTime - startTime;
     
     if(worldRank == 0){
-        std::printf("Time taken: %f seconds\n", elapsedTime);
+        std::printf(" Elapsed time: %f seconds\n", elapsedTime);
     }
 
     // Cleanup and save the output
