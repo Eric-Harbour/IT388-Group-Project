@@ -117,6 +117,7 @@ int main(int argc, char** argv) {
     std::string outputPath = "./resources/output.png";
     float sigma = 1.0f;
     int radius = 2;
+    int threadCountRow = 16;
 
     // Initialize the arguments
     if (argc < 2) {
@@ -136,13 +137,17 @@ int main(int argc, char** argv) {
         radius = std::stoi(argv[4]);
     }
 
+    if (argc > 5) {
+        threadCountRow = std::stoi(argv[5]);
+    }
+
     std::printf("Running blur on %s with sigma %f and radius %d with CUDA\n", argv[1], sigma, radius);
 
     // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
     Image inputImage = create_image(argv[1]);
     Image outputImage = create_empty_image(inputImage.width, inputImage.height);
 
-    dim3 blockDim(16, 16); // 16x16 = 256 threads
+    dim3 blockDim(threadCountRow, threadCountRow); // 16x16 = 256 threads
     dim3 gridDim((inputImage.width + blockDim.x - 1) / blockDim.x, (inputImage.height + blockDim.y - 1) / blockDim.y);
 
     // Start timing
