@@ -3,7 +3,7 @@
 #SBATCH --output="output.%j.%N.txt"
 #SBATCH --partition=compute
 #SBATCH --nodes=1
-#SBATCH --mem=4G
+#SBATCH --mem=20G
 #SBATCH --ntasks-per-node=128
 #SBATCH --account=isu103
 #SBATCH --export=ALL
@@ -15,11 +15,11 @@ RADIUS=50
 
 # OMP runs
 for i in 1 2 4 8 16 32 64 128; do
-	srun -n 1 ./omp_exec ./data/input_image.png ./data/omp_output_image_$i.png $SIGMA $RADIUS $i
+	./omp_exec ./data/input_image.jpg ./data/omp_output_image_$i.jpg $SIGMA $RADIUS $i
 done
 
-# OMP runs
+# MPI runs
 echo "\n"
 for i in 1 2 4 8 16 32 64 128; do
-	srun -n $i ./mpi_exec ./data/input_image.png ./data/mpi_output_image_$i.png $SIGMA $RADIUS
+	srun -n $i ./mpi_exec ./data/input_image.jpg ./data/mpi_output_image_$i.jpg $SIGMA $RADIUS
 done

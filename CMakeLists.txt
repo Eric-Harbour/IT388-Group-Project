@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
+option(ENABLE_CUDA "Enable CUDA support" ON)
 
-project(IT388Project LANGUAGES CXX CUDA)
+project(IT388Project LANGUAGES CXX)
 
 # Variables
 set(CMAKE_CXX_STANDARD 20)
@@ -33,23 +34,26 @@ target_link_libraries(mpi_exec
     PRIVATE MPI::MPI_CXX stb
 )
 
-# CUDA executable
-enable_language(CUDA)
-
-add_executable(cuda_exec
-    src/cuda_main.cu
-)
-
-target_link_libraries(cuda_exec
-	PRIVATE stb
-)
-
-set_target_properties(cuda_exec PROPERTIES
-    CUDA_STANDARD 17
-    CUDA_STANDARD_REQUIRED ON
-    CUDA_ARCHITECTURES 75
-)
-
-target_compile_options(cuda_exec PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=550>
-)
+if(ENABLE_CUDA)
+    # CUDA executable
+    message(STATUS "CUDA support enabled")
+    enable_language(CUDA)
+    
+    add_executable(cuda_exec
+        src/cuda_main.cu
+    )
+    
+    target_link_libraries(cuda_exec
+        PRIVATE stb
+    )
+    
+    set_target_properties(cuda_exec PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_ARCHITECTURES 75
+    )
+    
+    target_compile_options(cuda_exec PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-diag-suppress=550>
+    )
+endif()

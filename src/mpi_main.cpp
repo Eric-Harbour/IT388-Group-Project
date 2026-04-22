@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
             radius = std::stoi(argv[4]);
         }
 
-        std::printf("Running blur on %s with sigma %f and radius %d with MPI.", argv[1], sigma, radius);
+        std::printf("Running blur on %s with sigma %f and radius %d with MPI. Using %d processes.", argv[1], sigma, radius, worldSize);
 
         // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
         image = create_image(argv[1]);

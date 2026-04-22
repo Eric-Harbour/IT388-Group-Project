@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
         threadCountRow = std::stoi(argv[5]);
     }
 
-    std::printf("Running blur on %s with sigma %f and radius %d with CUDA.", argv[1], sigma, radius);
+    std::printf("Running blur on %s with sigma %f and radius %d with CUDA. Using %d threads.", argv[1], sigma, radius, threadCountRow * threadCountRow);
 
     // Extract pixels with pixelComponent=4 (red, green, blue, alpha)
     Image inputImage = create_image(argv[1]);
