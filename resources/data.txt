@@ -1,0 +1,26 @@
+SIGMA=10
+RADIUS=50
+
+OMP
+Using 1 threads. Elapsed time: 33.3046 seconds
+Using 2 threads. Elapsed time: 16.6805 seconds
+Using 4 threads. Elapsed time: 8.3828 seconds
+Using 8 threads. Elapsed time: 4.2265 seconds
+Using 16 threads. Elapsed time: 2.1307 seconds
+Using 32 threads. Elapsed time: 1.0966 seconds
+Using 64 threads. Elapsed time: 0.5735 seconds
+Using 128 threads. Elapsed time: 0.3742 seconds
+
+MPI
+Using 1 processes. Elapsed time: 33.465572 seconds
+Using 2 processes. Elapsed time: 16.810792 seconds
+Using 4 processes. Elapsed time: 8.436320 seconds
+Using 8 processes. Elapsed time: 4.281433 seconds
+Using 16 processes. Elapsed time: 2.254095 seconds
+Using 32 processes. Elapsed time: 1.281084 seconds
+Using 64 processes. Elapsed time: 0.994535 seconds
+Using 128 processes. Elapsed time: 1.629454 seconds
+
+CUDA
+Using 4096 threads. Elapsed time: 0.154134 seconds
+Using 16384 threads. Elapsed time: 0.153441 seconds

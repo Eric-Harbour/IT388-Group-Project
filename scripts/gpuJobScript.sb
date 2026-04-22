@@ -15,7 +15,6 @@ SIGMA=10
 RADIUS=50
 
 # Cuda runs
-echo "\n"
-for i in 1 2 4 8 16 32 64 128; do
+for i in 64 128; do
 	./cuda_exec ./data/input_image.jpg ./data/cuda_output_image_$i.jpg $SIGMA $RADIUS $i
 done

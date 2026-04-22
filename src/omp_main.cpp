@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
 	}
 	omp_set_num_threads(num_threads);
 
-	std::printf("Running blur on %s with sigma %f and radius %d. Using %d threads.", argv[1], sigma, radius, num_threads);
+	std::printf("Running blur on %s with sigma %f and radius %d with OMP. Using %d threads.", argv[1], sigma, radius, num_threads);
 
 	// Extract pixels with pixelComponent=4 (red, green, blue, alpha)
 	image = create_image(argv[1]);
