@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH --job-name="gaussian_blurs"
+#SBATCH --output="output.%j.%N.txt"
+#SBATCH --partition=gpu-shared
+#SBATCH --nodes=1
+#SBATCH --mem=4G
+#SBATCH --ntasks-per-node=128
+#SBATCH --gpus=1
+#SBATCH --account=isu103
+#SBATCH --export=ALL
+#SBATCH -t 00:10:00
+#This job runs with 1 nodes, 128 cores per node for a total of 128 tasks.
+
+SIGMA=10
+RADIUS=50
+
+# Cuda runs
+echo "\n"
+for i in 1 2 4 8 16 32 64 128; do
+	srun -n 1 ./cuda_exec ./data/input_image.png ./data/cuda_output_image_$i.png $SIGMA $RADIUS $i
+done
