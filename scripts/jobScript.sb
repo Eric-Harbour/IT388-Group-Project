@@ -1,0 +1,24 @@
+#!/bin/bash
+#SBATCH --job-name="gaussian_blurs"
+#SBATCH --output="output.%j.%N.txt"
+#SBATCH --partition=compute
+#SBATCH --nodes=1
+#SBATCH --mem=4G
+#SBATCH --ntasks-per-node=128
+#SBATCH --account=isu103
+#SBATCH --export=ALL
+#SBATCH -t 00:10:00
+#This job runs with 1 nodes, 128 cores per node for a total of 128 tasks.
+
+# OMP runs
+for i in 1 2 4 8 16 32 64 128; do
+	srun -n 1 ./omp_exec input_image.png omp_output_image_($i).png 0.4 5 $i
+done
+
+# OMP runs
+for i in 1 2 4 8 16 32 64 128; do
+	srun -n $i ./mpi_exec input_image.png mpi_output_image_($i).png 0.4 5
+done
+
+# Cuda runs
+srun -n 1 ./cuda_exec input_image.png cuda_output_image.png 0.4 5
