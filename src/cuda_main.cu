@@ -6,6 +6,7 @@
 #include <iostream>
 #include <utility>
 
+// Simple struct to keep track of image metadata and the raw pixel data
 struct Image {
     int width = 0;
     int height = 0;
@@ -14,17 +15,20 @@ struct Image {
     bool transposed = false;
 };
 
+// Loads an image from disk and moves it into CUDA managed memory
 Image create_image(const std::string& file){
     Image image;
     
+    // Force 4 channels (RGBA) for simplicity
     auto* rawData = reinterpret_cast<std::byte*>(stbi_load(file.c_str(), &image.width, &image.height, &image.channels, 4));
-    image.channels = 4; // Reset channels to 4 because stbi_load's req_comp is 4 so the data will be forced to 4.
+    image.channels = 4; // Force the image to be 4 channels in the meta data because req_comp is 4
     
     if (!rawData) {
         std::cerr << "Failed to load image" << std::endl;
         assert(rawData != nullptr && "Failed to load image");
     }
     
+    // Use managed memory so both CPU and GPU can access it easily
     cudaMallocManaged(&image.data, image.width * image.height * 4);
     cudaMemcpy(image.data, rawData, image.width * image.height * 4, cudaMemcpyHostToDevice);
     stbi_image_free(rawData);
@@ -51,8 +55,8 @@ void free_image(Image& image){
     image.transposed = false;
 }
 
+// Swaps rows and columns. This lets us use the same horizontal blur kernel for vertical blurring.
 void transpose(Image& image) {
-    // Skip if no data
     if(!image.data)
         return;
 
@@ -80,6 +84,7 @@ void save_image(Image& image, const std::string& file){
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
+// 1D Gaussian blur kernel. We run this twice (with a transpose in between) to get a full 2D blur.
 __global__ void horizontal_blur(const Image& input, Image& output, float sigma, int radius) {
     assert(input.width == output.width && input.height == output.height && input.channels == output.channels);
 
@@ -92,6 +97,7 @@ __global__ void horizontal_blur(const Image& input, Image& output, float sigma, 
     float4 color = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     float totalWeight = 0.0f;
 
+    // Apply the Gaussian weights to the surrounding pixels in the current row
     for (int i = -radius; i <= radius; i++) {
         int nx = x + i;
         if (nx >= 0 && nx < input.width) {
@@ -125,21 +131,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (argc > 2) {
-        outputPath = argv[2];
-    }
-
-    if (argc > 3) {
-        sigma = std::stof(argv[3]);
-    }
-
-    if (argc > 4) {
-        radius = std::stoi(argv[4]);
-    }
-
-    if (argc > 5) {
-        threadCountRow = std::stoi(argv[5]);
-    }
+    if (argc > 2) outputPath = argv[2];
+    if (argc > 3) sigma = std::stof(argv[3]);
+    if (argc > 4) radius = std::stoi(argv[4]);
+    if (argc > 5) threadCountRow = std::stoi(argv[5]);
 
     std::printf("Running blur on %s with sigma %f and radius %d with CUDA. Using %d threads.", argv[1], sigma, radius, threadCountRow * threadCountRow);
 
@@ -147,7 +142,7 @@ int main(int argc, char** argv) {
     Image inputImage = create_image(argv[1]);
     Image outputImage = create_empty_image(inputImage.width, inputImage.height);
 
-    dim3 blockDim(threadCountRow, threadCountRow); // 16x16 = 256 threads
+    dim3 blockDim(threadCountRow, threadCountRow); 
     dim3 gridDim((inputImage.width + blockDim.x - 1) / blockDim.x, (inputImage.height + blockDim.y - 1) / blockDim.y);
 
     // Start timing
@@ -156,11 +151,12 @@ int main(int argc, char** argv) {
     cudaEventCreate(&stop);
     cudaEventRecord(start);
     
-    // Do the row gaussian blur first
+    // Pass 1: Horizontal Blur
     horizontal_blur<<<gridDim, blockDim>>>(inputImage, outputImage, sigma, radius);
     cudaDeviceSynchronize();
 
-    // Flip the image and do the vertical gaussian blur now
+    // To do the vertical blur, we flip the image and run the horizontal kernel again.
+    // This is often faster than writing a separate vertical kernel because of memory access patterns.
     transpose(outputImage);
     std::swap(inputImage.width, inputImage.height);
 
@@ -169,7 +165,7 @@ int main(int argc, char** argv) {
     horizontal_blur<<<gridDim, blockDim>>>(outputImage, inputImage, sigma, radius);
     cudaDeviceSynchronize();
 
-    // Reconstruct back to normal image
+    // Flip it back to normal orientation
     transpose(inputImage);
     cudaDeviceSynchronize();
 

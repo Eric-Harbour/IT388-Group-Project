@@ -9,6 +9,7 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
+// Basic image container
 struct Image {
     int width = 0;
     int height = 0;
@@ -17,6 +18,7 @@ struct Image {
     bool transposed = false;
 };
 
+// Loads image from file. Only the manager (rank 0) usually calls this.
 Image create_image(const std::string& file){
     Image image;
     image.data = reinterpret_cast<std::byte*>(stbi_load(file.c_str(), &image.width, &image.height, &image.channels, 4));
@@ -27,7 +29,7 @@ Image create_image(const std::string& file){
         assert(image.data != nullptr && "Failed to load image");
     }
 
-    image.channels = 4; // Reset channels to 4 because stbi_load's req_comp is 4 so the data will be forced to 4.
+    image.channels = 4; // Force RGBA
     return image;
 }
 
@@ -40,6 +42,7 @@ void free_image(Image& image){
     image.transposed = false;
 }
 
+// Flips image rows and columns to enable vertical blur using a horizontal pass
 void transpose(Image& image) {
     std::swap(image.width, image.height);
     image.transposed = !image.transposed;
@@ -70,12 +73,14 @@ void save_image(Image& image, const std::string& file){
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
+// Distributes image rows to all processes to perform a horizontal blur in parallel
 void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int worldSize, MPI_Comm world){
     // Split the image into rows to calculate the row-based blur
     std::vector<int> sendCounts, displacements;
     sendCounts.resize(worldSize);
     displacements.resize(worldSize);
     
+    // Calculate how many rows each rank gets. Last rank picks up any remainder.
     for (int rank = 0; rank < worldSize; rank++) {
         int localHeight = image.height / worldSize;
 
@@ -86,15 +91,15 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
         displacements[rank] = (rank == 0) ? 0 : displacements[rank - 1] + sendCounts[rank - 1];
     }
 
-	int localSize = sendCounts[worldRank]; // How many bytes each processor handles
+	int localSize = sendCounts[worldRank]; 
 	int localHeight = localSize / (image.width * image.channels);
 
-    // Scatter pixels so each processor has their own subdivided image
+    // Scatter the image data across all processes
     std::byte* localPixels = new std::byte[localSize];
     std::byte* blurredPixels = new std::byte[localSize];
     MPI_Scatterv(image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, localPixels, localSize, MPI_UNSIGNED_CHAR, 0, world);
 
-    // Blur the local pixels horizontally
+    // Apply the horizontal blur kernel locally
     for(int y = 0; y < localHeight; y++){
         for(int x = 0; x < image.width; x++){
             for(int k = 0; k < image.channels; k++){
@@ -105,7 +110,6 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
                 // Gaussian blur kernel
                 float weightSum = 0.0f;
 
-                // Blur this row by radius
                 for (int dx = -radius; dx <= radius; dx++) {
                     int nx = x + dx;
 
@@ -122,7 +126,7 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
         }
     }
 
-    // Send the local pixels back to the image
+    // Gather the blurred chunks back into the main image buffer on rank 0
     MPI_Gatherv(blurredPixels, localSize, MPI_UNSIGNED_CHAR, image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, 0, world);
     delete[] localPixels;
     delete[] blurredPixels;
@@ -142,7 +146,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(world, &worldRank);
     MPI_Comm_size(world, &worldSize);
 
-    // Manager validates input arguments and loads image
+    // Manager (rank 0) handles input and file I/O
     if (worldRank == 0) {    
         if (argc < 2) {
             std::printf("Usage: mpiexec -n <number-of-processes> %s (image-file-name) [output-file-name] [sigma] [radius]\n", argv[0]);
@@ -150,17 +154,9 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (argc > 2) {
-            outputPath = argv[2];
-        }
-
-        if (argc > 3) {
-            sigma = std::stof(argv[3]);
-        }
-
-        if (argc > 4) {
-            radius = std::stoi(argv[4]);
-        }
+        if (argc > 2) outputPath = argv[2];
+        if (argc > 3) sigma = std::stof(argv[3]);
+        if (argc > 4) radius = std::stoi(argv[4]);
 
         std::printf("Running blur on %s with sigma %f and radius %d with MPI. Using %d processes.", argv[1], sigma, radius, worldSize);
 
@@ -171,24 +167,32 @@ int main(int argc, char** argv) {
     // Time the execution
     double startTime = MPI_Wtime();
 
-    // Broadcast basic image data
+    // Broadcast image metadata and blur params to all workers
     MPI_Bcast(&image.width, 1, MPI_INT, 0, world);
     MPI_Bcast(&image.height, 1, MPI_INT, 0, world);
     MPI_Bcast(&image.channels, 1, MPI_INT, 0, world);
     MPI_Bcast(&sigma, 1, MPI_FLOAT, 0, world);
     MPI_Bcast(&radius, 1, MPI_INT, 0, world);
     
-    // Do the row gaussian blur first
+    // First pass: Horizontal blur
     horizontal_blur(image, sigma, radius, worldRank, worldSize, world);
 
-    // Flip the image and do the vertical gaussian bllur now
-    transpose(image);
+    // Transpose image locally on rank 0 (other ranks have no image data currently)
+    if (worldRank == 0) {
+        transpose(image);
+    }
 
-    // Now that its flipped, do another blur for the other direction
+    // Broadcast new dimensions after transpose
+    MPI_Bcast(&image.width, 1, MPI_INT, 0, world);
+    MPI_Bcast(&image.height, 1, MPI_INT, 0, world);
+
+    // Second pass: Another "horizontal" blur (which is vertical relative to original orientation)
     horizontal_blur(image, sigma, radius, worldRank, worldSize, world);
 
-    // Reconstruct back to normal image
-    transpose(image);
+    // Final transpose back to original orientation
+    if (worldRank == 0) {
+        transpose(image);
+    }
 
     // Feedback for time
     double endTime = MPI_Wtime();
@@ -196,10 +200,9 @@ int main(int argc, char** argv) {
     
     if(worldRank == 0){
         std::printf(" Elapsed time: %f seconds\n", elapsedTime);
+        save_image(image, outputPath);
     }
 
-    // Cleanup and save the output
-    save_image(image, outputPath);
     free_image(image);
     MPI_Finalize();
     return 0;

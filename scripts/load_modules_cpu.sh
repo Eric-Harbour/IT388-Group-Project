@@ -1,4 +1,5 @@
 #!/bin/bash
+# Load the necessary modules for compiling and running CPU-based (OMP/MPI) code
 echo "Loading modules..."
 echo "GCC"
 module load gcc/10.2.0

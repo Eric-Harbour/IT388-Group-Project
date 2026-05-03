@@ -1,4 +1,5 @@
 #!/bin/bash
+# SLURM script for running CPU benchmarks (OMP and MPI) on Expanse
 #SBATCH --job-name="gaussian_blurs"
 #SBATCH --output="output.%j.%N.txt"
 #SBATCH --partition=compute
@@ -8,18 +9,18 @@
 #SBATCH --account=isu103
 #SBATCH --export=ALL
 #SBATCH -t 00:10:00
-#This job runs with 1 nodes, 128 cores per node for a total of 128 tasks.
 
 SIGMA=10
 RADIUS=50
 
-# OMP runs
+# Run OMP benchmarks with increasing thread counts
+echo "Running OpenMP benchmarks..."
 for i in 1 2 4 8 16 32 64 128; do
 	./omp_exec ./data/input_image.jpg ./data/omp_output_image_$i.jpg $SIGMA $RADIUS $i
 done
 
-# MPI runs
-echo "\n"
+# Run MPI benchmarks with increasing process counts
+echo -e "\nRunning MPI benchmarks..."
 for i in 1 2 4 8 16 32 64 128; do
 	srun -n $i ./mpi_exec ./data/input_image.jpg ./data/mpi_output_image_$i.jpg $SIGMA $RADIUS
 done

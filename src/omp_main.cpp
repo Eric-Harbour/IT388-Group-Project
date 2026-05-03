@@ -1,7 +1,5 @@
 /**
- * Running omp_main.cpp requires the program to know.
- * 1. How many threads you want to run (argv[1]: nThreads)
- * 2. What image you want to process (argv[2]: imgName)
+ * This version uses OpenMP for multi-core CPU parallelization.
  */
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -15,6 +13,7 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
+// Basic image struct
 struct Image {
 	int width = 0;
 	int height = 0;
@@ -23,6 +22,7 @@ struct Image {
 	bool transposed = false;
 };
 
+// Loads image into memory
 Image create_image(const std::string &file) {
 	Image image;
 	image.data = reinterpret_cast<std::byte *>(stbi_load( file.c_str(), &image.width, &image.height, &image.channels, 4));
@@ -33,7 +33,7 @@ Image create_image(const std::string &file) {
 		assert(image.data != nullptr && "Failed to load image");
 	}
 
-	image.channels = 4; // Reset channels to 4 because stbi_load's req_comp is 4 so the data will be forced to 4.
+	image.channels = 4; // Force RGBA
 	return image;
 }
 
@@ -47,6 +47,7 @@ void free_image(Image &image) {
 	image.transposed = false;
 }
 
+// Transpose the image pixels to enable vertical blur with a horizontal kernel
 void transpose(Image &image) {
 	// Skip if no data
 	if (!image.data)
@@ -55,7 +56,8 @@ void transpose(Image &image) {
 	// Use STBI_MALLOC so stbi_image_free can handle it later
 	std::byte *newData = reinterpret_cast<std::byte *>(STBI_MALLOC(image.width * image.height * image.channels));
 
-#pragma omp parallel for schedule(static)
+    // Parallelize the transpose operation across CPU cores
+	#pragma omp parallel for schedule(static)
 	for (int i = 0; i < image.width; i++) {
 		for (int j = 0; j < image.height; j++) {
 			for (int k = 0; k < image.channels; k++) {
@@ -79,23 +81,22 @@ void save_image(Image &image, const std::string &file) {
 	stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
+// Applies a 1D Gaussian blur horizontally
 void horizontal_blur(Image &image, float sigma, int radius) {
 	// Split the image into rows to calculate the row-based blur
 	std::vector<std::byte> output_image(image.width * image.height * image.channels);
 
-	// Blur the local pixels horizontally
-#pragma omp parallel for
+    // Parallelize row processing
+	#pragma omp parallel for
 	for (int y = 0; y < image.height; y++) {
 		for (int x = 0; x < image.width; x++) {
 			for (int k = 0; k < image.channels; k++) {
 				// Calculate index of this pixel
 				int index = (y * image.width + x) * image.channels + k;
 				float sum = 0.0f;
-
-				// Gaussian blur kernel
 				float weightSum = 0.0f;
 
-				// Blur this row by radius
+				// 1D Gaussian kernel
 				for (int dx = -radius; dx <= radius; dx++) {
 					int nx = x + dx;
 
@@ -127,18 +128,11 @@ int main(int argc, char **argv) {
 		std::printf("Usage: %s <image-file-name> [output-file-name] [sigma] [radius] [num-threads]\n", argv[0]);
 		return 1;
 	}
-	if (argc > 2) {
-		outputPath = argv[2];
-	}
-	if (argc > 3) {
-		sigma = std::stof(argv[3]);
-	}
-	if (argc > 4) {
-		radius = std::stoi(argv[4]);
-	}
-	if (argc > 5) {
-		num_threads = std::stoi(argv[5]);
-	}
+	if (argc > 2) outputPath = argv[2];
+	if (argc > 3) sigma = std::stof(argv[3]);
+	if (argc > 4) radius = std::stoi(argv[4]);
+	if (argc > 5) num_threads = std::stoi(argv[5]);
+
 	omp_set_num_threads(num_threads);
 
 	std::printf("Running blur on %s with sigma %f and radius %d with OMP. Using %d threads.", argv[1], sigma, radius, num_threads);
@@ -148,16 +142,16 @@ int main(int argc, char **argv) {
 
 	double start_time = omp_get_wtime();
 
-	// Do the row gaussian blur first
+	// First pass: Horizontal blur
 	horizontal_blur(image, sigma, radius);
 
-	// Flip the image and do the vertical gaussian blur now
+	// Transpose to set up for vertical blur
 	transpose(image);
 
-	// Now that its flipped, do another blur for the other direction
+	// Second pass: Horizontal blur (effectively vertical)
 	horizontal_blur(image, sigma, radius);
 
-	// Reconstruct back to normal image
+	// Transpose back
 	transpose(image);
 
 	double elapsed_time = omp_get_wtime() - start_time;
@@ -165,6 +159,5 @@ int main(int argc, char **argv) {
 
 	save_image(image, outputPath);
 	free_image(image);
-
 	return 0;
 }

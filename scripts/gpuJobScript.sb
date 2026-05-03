@@ -1,4 +1,5 @@
 #!/bin/bash
+# SLURM script for running CUDA benchmarks on Expanse GPU nodes
 #SBATCH --job-name="gaussian_blurs"
 #SBATCH --output="output.%j.%N.txt"
 #SBATCH --partition=gpu-shared
@@ -9,12 +10,12 @@
 #SBATCH --account=isu103
 #SBATCH --export=ALL
 #SBATCH -t 00:10:00
-#This job runs with 1 nodes, 128 cores per node for a total of 128 tasks.
 
 SIGMA=10
 RADIUS=50
 
-# Cuda runs
+# Run CUDA benchmarks with different block sizes/thread counts
+echo "Running CUDA benchmarks..."
 for i in 64 128; do
 	./cuda_exec ./data/input_image.jpg ./data/cuda_output_image_$i.jpg $SIGMA $RADIUS $i
 done
