@@ -16,18 +16,18 @@ struct Image {
 };
 
 // Loads an image from disk and moves it into CUDA managed memory
-Image create_image(const std::string& file){
+Image create_image(const std::string& file) {
     Image image;
-    
+
     // Force 4 channels (RGBA) for simplicity
     auto* rawData = reinterpret_cast<std::byte*>(stbi_load(file.c_str(), &image.width, &image.height, &image.channels, 4));
     image.channels = 4; // Force the image to be 4 channels in the meta data because req_comp is 4
-    
+
     if (!rawData) {
         std::cerr << "Failed to load image" << std::endl;
         assert(rawData != nullptr && "Failed to load image");
     }
-    
+
     // Use managed memory so both CPU and GPU can access it easily
     cudaMallocManaged(&image.data, image.width * image.height * 4);
     cudaMemcpy(image.data, rawData, image.width * image.height * 4, cudaMemcpyHostToDevice);
@@ -36,7 +36,7 @@ Image create_image(const std::string& file){
     return image;
 }
 
-Image create_empty_image(unsigned int width, unsigned int height){
+Image create_empty_image(unsigned int width, unsigned int height) {
     Image image;
     image.width = width;
     image.height = height;
@@ -46,8 +46,8 @@ Image create_empty_image(unsigned int width, unsigned int height){
     return image;
 }
 
-void free_image(Image& image){
-    if(image.data) cudaFree(image.data);
+void free_image(Image& image) {
+    if (image.data) cudaFree(image.data);
     image.data = nullptr;
     image.width = 0;
     image.height = 0;
@@ -57,15 +57,14 @@ void free_image(Image& image){
 
 // Swaps rows and columns. This lets us use the same horizontal blur kernel for vertical blurring.
 void transpose(Image& image) {
-    if(!image.data)
-        return;
+    if (!image.data) return;
 
     std::byte* newData;
     cudaMallocManaged(&newData, image.width * image.height * image.channels);
 
-    for(int i = 0; i < image.width; i++) {
-        for(int j = 0; j < image.height; j++) {
-            for(int k = 0; k < image.channels; k++) {
+    for (int i = 0; i < image.width; i++) {
+        for (int j = 0; j < image.height; j++) {
+            for (int k = 0; k < image.channels; k++) {
                 newData[(j + i * image.height) * image.channels + k] = image.data[(i + j * image.width) * image.channels + k];
             }
         }
@@ -77,8 +76,8 @@ void transpose(Image& image) {
     image.transposed = !image.transposed;
 }
 
-void save_image(Image& image, const std::string& file){
-    if(!image.data)
+void save_image(Image& image, const std::string& file) {
+    if (!image.data)
         return;
 
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
@@ -103,7 +102,7 @@ __global__ void horizontal_blur(const Image& input, Image& output, float sigma, 
         if (nx >= 0 && nx < input.width) {
             int idx = (y * input.width + nx) * 4;
             float weight = expf(-(i * i) / (2.0f * sigma * sigma));
-            
+
             color.x += (unsigned char)input.data[idx] * weight;
             color.y += (unsigned char)input.data[idx + 1] * weight;
             color.z += (unsigned char)input.data[idx + 2] * weight;
@@ -113,7 +112,7 @@ __global__ void horizontal_blur(const Image& input, Image& output, float sigma, 
     }
 
     int outIdx = (y * input.width + x) * 4;
-    output.data[outIdx]     = (std::byte)(color.x / totalWeight);
+    output.data[outIdx] = (std::byte)(color.x / totalWeight);
     output.data[outIdx + 1] = (std::byte)(color.y / totalWeight);
     output.data[outIdx + 2] = (std::byte)(color.z / totalWeight);
     output.data[outIdx + 3] = (std::byte)(color.w / totalWeight);
@@ -142,7 +141,7 @@ int main(int argc, char** argv) {
     Image inputImage = create_image(argv[1]);
     Image outputImage = create_empty_image(inputImage.width, inputImage.height);
 
-    dim3 blockDim(threadCountRow, threadCountRow); 
+    dim3 blockDim(threadCountRow, threadCountRow);
     dim3 gridDim((inputImage.width + blockDim.x - 1) / blockDim.x, (inputImage.height + blockDim.y - 1) / blockDim.y);
 
     // Start timing
@@ -150,7 +149,7 @@ int main(int argc, char** argv) {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    
+
     // Pass 1: Horizontal Blur
     horizontal_blur<<<gridDim, blockDim>>>(inputImage, outputImage, sigma, radius);
     cudaDeviceSynchronize();

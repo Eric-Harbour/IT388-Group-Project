@@ -61,8 +61,7 @@ void transpose(Image &image) {
 	for (int i = 0; i < image.width; i++) {
 		for (int j = 0; j < image.height; j++) {
 			for (int k = 0; k < image.channels; k++) {
-				newData[(j + i * image.height) * image.channels + k] =
-					image.data[(i + j * image.width) * image.channels + k];
+				newData[(j + i * image.height) * image.channels + k] = image.data[(i + j * image.width) * image.channels + k];
 			}
 		}
 	}

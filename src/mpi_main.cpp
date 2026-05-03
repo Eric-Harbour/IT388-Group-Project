@@ -1,7 +1,7 @@
 #include <cassert>
+#include <iostream>
 #include <mpi.h>
 #include <string>
-#include <iostream>
 #include <utility>
 #include <vector>
 #define STB_IMAGE_IMPLEMENTATION
@@ -19,7 +19,7 @@ struct Image {
 };
 
 // Loads image from file. Only the manager (rank 0) usually calls this.
-Image create_image(const std::string& file){
+Image create_image(const std::string& file) {
     Image image;
     image.data = reinterpret_cast<std::byte*>(stbi_load(file.c_str(), &image.width, &image.height, &image.channels, 4));
 
@@ -33,8 +33,8 @@ Image create_image(const std::string& file){
     return image;
 }
 
-void free_image(Image& image){
-    if(image.data) stbi_image_free(image.data);
+void free_image(Image& image) {
+    if (image.data) stbi_image_free(image.data);
     image.data = nullptr;
     image.width = 0;
     image.height = 0;
@@ -48,15 +48,15 @@ void transpose(Image& image) {
     image.transposed = !image.transposed;
 
     // Skip if no data
-    if(!image.data)
+    if (!image.data)
         return;
 
     // Use STBI_MALLOC so stbi_image_free can handle it later
     std::byte* newData = reinterpret_cast<std::byte*>(STBI_MALLOC(image.width * image.height * image.channels));
 
-    for(int i = 0; i < image.height; i++) {
-        for(int j = 0; j < image.width; j++) {
-            for(int k = 0; k < image.channels; k++) {
+    for (int i = 0; i < image.height; i++) {
+        for (int j = 0; j < image.width; j++) {
+            for (int k = 0; k < image.channels; k++) {
                 newData[(j + i * image.width) * image.channels + k] = image.data[(i + j * image.height) * image.channels + k];
             }
         }
@@ -66,33 +66,33 @@ void transpose(Image& image) {
     image.data = newData;
 }
 
-void save_image(Image& image, const std::string& file){
-    if(!image.data)
+void save_image(Image& image, const std::string& file) {
+    if (!image.data)
         return;
 
     stbi_write_png(file.c_str(), image.width, image.height, image.channels, image.data, 0);
 }
 
 // Distributes image rows to all processes to perform a horizontal blur in parallel
-void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int worldSize, MPI_Comm world){
+void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int worldSize, MPI_Comm world) {
     // Split the image into rows to calculate the row-based blur
     std::vector<int> sendCounts, displacements;
     sendCounts.resize(worldSize);
     displacements.resize(worldSize);
-    
+
     // Calculate how many rows each rank gets. Last rank picks up any remainder.
     for (int rank = 0; rank < worldSize; rank++) {
         int localHeight = image.height / worldSize;
 
-        if(rank == worldSize - 1)
+        if (rank == worldSize - 1)
             localHeight += image.height % worldSize;
 
         sendCounts[rank] = localHeight * image.width * image.channels;
         displacements[rank] = (rank == 0) ? 0 : displacements[rank - 1] + sendCounts[rank - 1];
     }
 
-	int localSize = sendCounts[worldRank]; 
-	int localHeight = localSize / (image.width * image.channels);
+    int localSize = sendCounts[worldRank];
+    int localHeight = localSize / (image.width * image.channels);
 
     // Scatter the image data across all processes
     std::byte* localPixels = new std::byte[localSize];
@@ -100,9 +100,9 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
     MPI_Scatterv(image.data, sendCounts.data(), displacements.data(), MPI_UNSIGNED_CHAR, localPixels, localSize, MPI_UNSIGNED_CHAR, 0, world);
 
     // Apply the horizontal blur kernel locally
-    for(int y = 0; y < localHeight; y++){
-        for(int x = 0; x < image.width; x++){
-            for(int k = 0; k < image.channels; k++){
+    for (int y = 0; y < localHeight; y++) {
+        for (int x = 0; x < image.width; x++) {
+            for (int k = 0; k < image.channels; k++) {
                 // Calculate index of this pixel
                 int index = (y * image.width + x) * image.channels + k;
                 float sum = 0.0f;
@@ -134,10 +134,10 @@ void horizontal_blur(Image& image, float sigma, int radius, int worldRank, int w
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
-    
+
     int worldRank, worldSize;
     Image image;
-    
+
     std::string outputPath = "./resources/output.png";
     float sigma = 1.0f;
     int radius = 2;
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
     MPI_Comm_size(world, &worldSize);
 
     // Manager (rank 0) handles input and file I/O
-    if (worldRank == 0) {    
+    if (worldRank == 0) {
         if (argc < 2) {
             std::printf("Usage: mpiexec -n <number-of-processes> %s (image-file-name) [output-file-name] [sigma] [radius]\n", argv[0]);
             MPI_Abort(world, 1);
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
     MPI_Bcast(&image.channels, 1, MPI_INT, 0, world);
     MPI_Bcast(&sigma, 1, MPI_FLOAT, 0, world);
     MPI_Bcast(&radius, 1, MPI_INT, 0, world);
-    
+
     // First pass: Horizontal blur
     horizontal_blur(image, sigma, radius, worldRank, worldSize, world);
 
@@ -197,8 +197,8 @@ int main(int argc, char** argv) {
     // Feedback for time
     double endTime = MPI_Wtime();
     double elapsedTime = endTime - startTime;
-    
-    if(worldRank == 0){
+
+    if (worldRank == 0) {
         std::printf(" Elapsed time: %f seconds\n", elapsedTime);
         save_image(image, outputPath);
     }
