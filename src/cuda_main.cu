@@ -1,3 +1,8 @@
+/* File: cuda_main.c
+ * Name: Garrett Blankenship, Jeffrey Armour, Eric Harbour, and Nathan Hilbert 
+ * Course: IT 388 - Spring 2026
+ * Assignment: Gaussian Blur Project
+ */
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"

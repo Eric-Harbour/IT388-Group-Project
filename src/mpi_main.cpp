@@ -1,3 +1,8 @@
+/* File: mpi_main.c
+ * Name: Garrett Blankenship, Jeffrey Armour, Eric Harbour, and Nathan Hilbert 
+ * Course: IT 388 - Spring 2026
+ * Assignment: Gaussian Blur Project
+ */
 #include <cassert>
 #include <iostream>
 #include <mpi.h>
