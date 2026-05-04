@@ -25,7 +25,7 @@ Names: Garrett Blankenship, Jeffrey Armour, Eric Harbour, and Nathan Hilbert
 This project implements Gaussian blur using three parallel programming models: [OpenMP](./src/omp_main.cpp), [MPI](./src/mpi_main.cpp), and [CUDA](./src/cuda_main.cu). All three implementations use the same approach to compute the blurred image: 
 1. Split the rows of an image to run in parallel.
 2. Compute the new RGB value for each pixel using the values of the pixels around it on this row.
-3. Rotate the image so columns of pixels are now rows of the image.
+3. Rotate (transpose) the image so columns of pixels are now rows of the image.
 4. Perform steps 1 and 2 again.
 5. Transpose back to the original orientation to get the final result.
 
@@ -61,9 +61,13 @@ float weight = std::exp(-(dx * dx) / (2.0f * sigma * sigma));
 
 `sigma`: Standard deviation — controls the strength/spread of the blur.
 
-- `horizontal_blur`: This function is what performs the Gausian blur. 
+- **horizontal_blur()**: For each pixel, it samples pixels within the radius, get the sum of weights (shown above), the weight shown above, and writes the result to a new image. Skips non-existant pixels outside the image's size are skipped. Each implementation parallelizes this differently:
+  - **OpenMP**: Uses `#pragma omp parallel for` to distribute rows across CPU threads.
+  - **MPI**: Uses `MPI_Scatterv` to split up the rows among processes. Each process blurs each of their rows, then gathered back to the manager with `MPI_Gatherv`.
+  - **CUDA**: Each thread handles one pixel. All four color channels of the pixel are saved in a CUDA `float4` and written to the new image.
 
-- `create_image`: Loads a image using the stb_image library. This allows us to operate on the images pixels indivually stored in the custom Image struct. The CUDA version loads the image directly into the GPU's memory
+- **create_image()**: Loads a image using the stb_image library. This allows us to operate on the images pixels indivually stored in the custom Image struct. The CUDA version loads the image directly into the GPU's memory
 
-- `transpose`: Loops through each color channel of each pixel of the image and swaps every (i,j) with (j,i). The openMP implementation parallelizes this with static scheduling.
-- `save_image`:
+- **transpose()**: Loops through each color channel of each pixel of the image and swaps every (i,j) with (j,i). The openMP implementation parallelizes this with static scheduling.
+
+- **save_image()**: Uses stb_image_write to create a png file from our Image struct.
